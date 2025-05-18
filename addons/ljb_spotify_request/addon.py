@@ -178,19 +178,21 @@ def register(bot, folder=os.path.dirname(__file__)):
             await bot.safe_send(cfg[msg].format(**data))
 
     # channel-point redeem
-    async def on_redeem(evt:ChannelPointsCustomRewardRedemptionAddEvent):
-        print("[DEBUG] Redemption event attributes:", vars(evt))
-        # Try these (one of them will match, or check the printout!)
-        if hasattr(evt, "reward_title"):
-            match = evt.reward_title.lower() == cfg["redeem_name"].lower()
-        elif hasattr(evt, "title"):
-            match = evt.title.lower() == cfg["redeem_name"].lower()
-        else:
-            print("[ERROR] Cannot find reward title in event!")
-            match = False
+    async def on_redeem(evt: ChannelPointsCustomRewardRedemptionAddEvent):
+        reward_title = None
+        try:
+            reward_title = evt.event.reward.title
+        except AttributeError:
+            print("[ERROR] Could not get reward title from event!")
+        except Exception as e:
+            print(f"[ERROR] Unexpected error reading reward title: {e}")
 
-        if match:
-            await process_query(evt.user_input.strip())
+        if reward_title and reward_title.lower() == cfg["redeem_name"].lower():
+            user_input = getattr(evt.event, "user_input", "").strip()
+            if user_input:
+                await process_query(user_input)
+            else:
+                print("[WARN] No user_input found for this redemption.")
 
     # !sr command  ────────────────  (mods & streamer only)
     async def cmd_sr(msg, args):
