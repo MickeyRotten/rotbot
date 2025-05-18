@@ -122,7 +122,7 @@ def main():
 
     # ── PRE-LAUNCH BOT TOKEN REFRESH & EVENT LOOP SETUP ───────────
     from .oauth import refresh_bot_token
-    refresh_bot_token(cfg, save_cfg)
+    refresh_bot_token()
 
     # Ensure asyncio.get_event_loop() returns a loop for commands.Bot.__init__()
     import asyncio
