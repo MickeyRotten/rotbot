@@ -179,7 +179,17 @@ def register(bot, folder=os.path.dirname(__file__)):
 
     # channel-point redeem
     async def on_redeem(evt:ChannelPointsCustomRewardRedemptionAddEvent):
-        if evt.reward.title.lower()==cfg["redeem_name"].lower():
+        print("[DEBUG] Redemption event attributes:", vars(evt))
+        # Try these (one of them will match, or check the printout!)
+        if hasattr(evt, "reward_title"):
+            match = evt.reward_title.lower() == cfg["redeem_name"].lower()
+        elif hasattr(evt, "title"):
+            match = evt.title.lower() == cfg["redeem_name"].lower()
+        else:
+            print("[ERROR] Cannot find reward title in event!")
+            match = False
+
+        if match:
             await process_query(evt.user_input.strip())
 
     # !sr command  ────────────────  (mods & streamer only)
