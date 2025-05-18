@@ -1,4 +1,5 @@
 # oauth.py
+
 """
 oauth.py
 • Handles FIRST-TIME OAuth flow for *streamer* account
@@ -37,15 +38,12 @@ BOT_REFRESH_TOKEN = os.getenv("BOT_REFRESH_TOKEN")
 
 # --- Helper: Update .env after token refresh ---
 def update_env_var(key, value, env_file=".env"):
-    """Update or add a key=value pair in the .env file."""
     import re
-
     if os.path.exists(env_file):
         with open(env_file, "r") as f:
             lines = f.readlines()
     else:
         lines = []
-
     found = False
     for i, line in enumerate(lines):
         if re.match(rf"^{re.escape(key)}=", line):
@@ -54,29 +52,71 @@ def update_env_var(key, value, env_file=".env"):
             break
     if not found:
         lines.append(f"{key}={value}\n")
-
     with open(env_file, "w") as f:
         f.writelines(lines)
 
-# --- OAuth for Streamer ---
+def refresh_bot_token_env():
+    """Refresh the bot's access token using its refresh token, and update .env."""
+    global BOT_ACCESS_TOKEN, BOT_REFRESH_TOKEN
+    if not (CLIENT_ID and CLIENT_SECRET and BOT_REFRESH_TOKEN):
+        print("[OAuth] Cannot refresh: missing CLIENT_ID, CLIENT_SECRET, or BOT_REFRESH_TOKEN in .env")
+        return False
+    r = requests.post(
+        "https://id.twitch.tv/oauth2/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": BOT_REFRESH_TOKEN,
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+        }
+    )
+    if r.status_code != 200:
+        print("[OAuth] Refresh failed! Status:", r.status_code, r.text)
+        return False
+    d = r.json()
+    update_env_var("BOT_ACCESS_TOKEN", d["access_token"])
+    update_env_var("BOT_REFRESH_TOKEN", d["refresh_token"])
+    os.environ["BOT_ACCESS_TOKEN"] = d["access_token"]
+    os.environ["BOT_REFRESH_TOKEN"] = d["refresh_token"]
+    print("[OAuth] Bot access token refreshed and saved to .env")
+    return True
+
+def ensure_valid_bot_token():
+    """
+    Validate the bot's access token, auto-refresh if needed, and update .env.
+    Returns True if valid, False if unable to recover.
+    """
+    token = os.getenv("BOT_ACCESS_TOKEN")
+    r = requests.get(
+        "https://id.twitch.tv/oauth2/validate",
+        headers={"Authorization": f"OAuth {token}"}
+    )
+    if r.status_code == 200:
+        return True  # Token is valid
+    print("[OAuth] Invalid bot access token; attempting to refresh...")
+    if refresh_bot_token_env():
+        # Re-check after refresh
+        token = os.getenv("BOT_ACCESS_TOKEN")
+        r = requests.get(
+            "https://id.twitch.tv/oauth2/validate",
+            headers={"Authorization": f"OAuth {token}"}
+        )
+        if r.status_code == 200:
+            print("[OAuth] Refreshed token is valid!")
+            return True
+    print("[OAuth] Unable to refresh bot token. Please re-authorize.")
+    return False
+
+# -- STREAMER OAUTH & REFRESH -- (UNCHANGED FROM YOURS)
+
 def ensure_streamer_tokens(
     cfg: dict,
     scope_str: str,
     save_cfg: Callable[[dict], None],
 ):
-    """
-    If cfg already contains streamer_access_token → no-op.
-    Otherwise runs the browser consent flow and fills into cfg:
-        - streamer_access_token
-        - streamer_refresh_token
-        - twitch_channel          (login of the user who authorised)
-    Then calls save_cfg(cfg).
-    Uses CLIENT_ID, CLIENT_SECRET from .env
-    """
     if cfg.get("streamer_access_token"):
         return  # already authorised
 
-    # mini localhost server to catch "?code="
     box = {}
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -100,24 +140,22 @@ def ensure_streamer_tokens(
     auth_url = (
         "https://id.twitch.tv/oauth2/authorize"
         f"?response_type=code"
-        f"&client_id={CLIENT_ID}"
+        f"&client_id={os.getenv('CLIENT_ID')}"
         f"&redirect_uri={quote_plus(REDIRECT_URI)}"
         f"&scope={scope_str}"
     )
     print("[OAuth] Opening browser – log in as the STREAMER and click Authorise")
     webbrowser.open(auth_url)
 
-    # wait for code
     while "code" not in box:
         time.sleep(0.1)
     svr.server_close()
 
-    # exchange for tokens
     resp = requests.post(
         "https://id.twitch.tv/oauth2/token",
         data={
-            "client_id":     CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
+            "client_id":     os.getenv("CLIENT_ID"),
+            "client_secret": os.getenv("CLIENT_SECRET"),
             "code":          box["code"],
             "grant_type":    "authorization_code",
             "redirect_uri":  REDIRECT_URI,
@@ -128,11 +166,10 @@ def ensure_streamer_tokens(
     cfg["streamer_access_token"]  = d["access_token"]
     cfg["streamer_refresh_token"] = d["refresh_token"]
 
-    # fetch the streamer’s login
     me = requests.get(
         "https://api.twitch.tv/helix/users",
         headers={
-            "Client-ID":     CLIENT_ID,
+            "Client-ID":     os.getenv("CLIENT_ID"),
             "Authorization": f"Bearer {d['access_token']}"
         },
     ).json()["data"][0]
@@ -141,16 +178,10 @@ def ensure_streamer_tokens(
     save_cfg(cfg)
     print("[OAuth] Streamer tokens stored.")
 
-
 def refresh_streamer_sync(
     cfg: dict,
     save_cfg: Callable[[dict], None],
 ):
-    """
-    Refreshes cfg['streamer_access_token'] via cfg['streamer_refresh_token'].
-    No-op if no streamer_refresh_token in cfg.
-    Uses CLIENT_ID, CLIENT_SECRET from .env
-    """
     if not cfg.get("streamer_refresh_token"):
         return
 
@@ -158,8 +189,8 @@ def refresh_streamer_sync(
         resp = requests.post(
             "https://id.twitch.tv/oauth2/token",
             data={
-                "client_id":     CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
+                "client_id":     os.getenv("CLIENT_ID"),
+                "client_secret": os.getenv("CLIENT_SECRET"),
                 "grant_type":    "refresh_token",
                 "refresh_token": cfg["streamer_refresh_token"],
             },
@@ -173,52 +204,3 @@ def refresh_streamer_sync(
         print("[OAuth] Streamer access token refreshed.")
     except Exception as e:
         print("[OAuth] Streamer token refresh failed:", e)
-
-
-async def _do_refresh_bot():
-    """
-    Async helper to refresh the bot’s own IRC token.
-    Uses CLIENT_ID, CLIENT_SECRET, BOT_ACCESS_TOKEN, BOT_REFRESH_TOKEN from .env.
-    Saves new tokens back to .env!
-    """
-    cli = await Twitch(CLIENT_ID, CLIENT_SECRET)
-    await cli.set_user_authentication(
-        BOT_ACCESS_TOKEN,
-        [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT],
-        BOT_REFRESH_TOKEN,
-    )
-    new = await cli.refresh_user_token()
-    await cli.close()
-    # persist new bot tokens to .env
-    update_env_var("BOT_ACCESS_TOKEN", new["access_token"])
-    update_env_var("BOT_REFRESH_TOKEN", new["refresh_token"])
-    print("[OAuth] Bot token refreshed.")
-
-
-def refresh_bot_token():
-    """
-    Refresh the bot's IRC token using its refresh_token, synchronously.
-    Uses CLIENT_ID, CLIENT_SECRET, BOT_REFRESH_TOKEN from .env.
-    Saves new tokens back to .env!
-    """
-    if not BOT_REFRESH_TOKEN:
-        return
-
-    try:
-        r = requests.post(
-            "https://id.twitch.tv/oauth2/token",
-            data={
-                "grant_type":    "refresh_token",
-                "refresh_token": BOT_REFRESH_TOKEN,
-                "client_id":     CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-            },
-            timeout=10
-        )
-        r.raise_for_status()
-        j = r.json()
-        update_env_var("BOT_ACCESS_TOKEN", j["access_token"])
-        update_env_var("BOT_REFRESH_TOKEN", j["refresh_token"])
-        print("[OAuth] Bot access token refreshed.")
-    except Exception as e:
-        print(f"[OAuth] Bot token auto-refresh failed: {e}")

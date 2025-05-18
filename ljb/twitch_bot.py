@@ -13,28 +13,25 @@ import signal
 from pathlib import Path
 from urllib.parse import quote_plus
 
-import requests  # <- needed for token validation
+import requests
 from twitchio.ext import commands
 from twitchAPI.twitch import Twitch
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.type import AuthScope
 from twitchAPI.helper import first
 
-from .oauth import ensure_streamer_tokens, refresh_streamer_sync
-from .oauth import refresh_bot_token
+from .oauth import ensure_streamer_tokens, refresh_streamer_sync, ensure_valid_bot_token
 from .rate_limit import Limiter
 from .addon_loader import discover
 
 from dotenv import load_dotenv
 
-# ── FILE PATHS & CONFIG ─────────────────────────────────────────
 ROOT   = Path(__file__).resolve().parent.parent
 CFG_FN = ROOT / "config.json"
 ADDONS = ROOT / "addons"
 ADDONS.mkdir(parents=True, exist_ok=True)
 load_dotenv()
 
-# ── DEFAULT CONFIG ──────────────────────────────────────────────
 CLIENT_ID        = os.getenv("CLIENT_ID")
 CLIENT_SECRET    = os.getenv("CLIENT_SECRET")
 BOT_ACCESS_TOKEN = os.getenv("BOT_ACCESS_TOKEN")
@@ -48,18 +45,13 @@ DEFAULT = {
 }
 
 def load_cfg() -> dict:
-    """
-    Load or create config.json and validate presence of required secrets.
-    """
     if not CFG_FN.exists():
         CFG_FN.write_text(json.dumps(DEFAULT, indent=2))
         print(f"Config created at {CFG_FN}. Please fill in twitch_channel & bot_nick.")
         sys.exit(0)
-
     cfg = json.loads(CFG_FN.read_text())
     for k, v in DEFAULT.items():
         cfg.setdefault(k, v)
-
     # Check for required secrets in environment
     missing = []
     for var in ["CLIENT_ID", "CLIENT_SECRET", "BOT_ACCESS_TOKEN", "BOT_REFRESH_TOKEN"]:
@@ -68,24 +60,15 @@ def load_cfg() -> dict:
     if missing:
         print(f"Missing required secret(s) in .env: {', '.join(missing)}. Please fill in and restart.")
         sys.exit(1)
-
-    # Optional: validate token via Twitch API as before, using BOT_ACCESS_TOKEN
-    tok = os.getenv("BOT_ACCESS_TOKEN")
-    r = requests.get(
-        "https://id.twitch.tv/oauth2/validate",
-        headers={"Authorization": f"OAuth {tok}"}
-    )
-    if r.status_code != 200:
-        print("Invalid bot access token; please update your .env file.")
+    # Validate token (with auto-refresh)
+    if not ensure_valid_bot_token():
+        print("[fatal] Could not get a valid bot access token after refresh attempt.")
         sys.exit(1)
-
     return cfg
 
 def save_cfg(c: dict):
     CFG_FN.write_text(json.dumps(c, indent=2))
 
-
-# ── LOGGER ───────────────────────────────────────────────────────
 LOG_DIR = ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 logfile = LOG_DIR / f"bot_{datetime.date.today()}.txt"
@@ -99,12 +82,8 @@ logging.basicConfig(
 )
 logging.info("------------- bot starting -------------")
 
-
-# ── MAIN entrypoint (called by bootstrap.py) ────────────────────
 def main():
     cfg = load_cfg()
-
-    # 1) add-on discovery & scope merge
     mods, dirs, extra = discover(ADDONS)
     core = [
         AuthScope.CHAT_READ,
@@ -113,27 +92,17 @@ def main():
     ]
     all_scopes = sorted({*core, *extra}, key=lambda s: s.value)
     scope_str  = quote_plus(" ".join(s.value for s in all_scopes))
-
-    # 2) ensure streamer token pair (auto-OAuth) & refresh
     ensure_streamer_tokens(cfg, scope_str, save_cfg)
     refresh_streamer_sync(cfg, save_cfg)
+    limiter = Limiter()
 
-    limiter = Limiter()       # 3) message rate limiter
-
-    # ── PRE-LAUNCH BOT TOKEN REFRESH & EVENT LOOP SETUP ───────────
-    from .oauth import refresh_bot_token
-    refresh_bot_token()
-
-    # Ensure asyncio.get_event_loop() returns a loop for commands.Bot.__init__()
     import asyncio
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # 4) twitchIO bot --------------------------------------------------------
     class LJB(commands.Bot):
         def __init__(self):
-            # pass the bot_access_token (no "oauth:" in config)
-            token = f"oauth:{BOT_ACCESS_TOKEN}"
+            token = f"oauth:{os.getenv('BOT_ACCESS_TOKEN')}"
             super().__init__(
                 token=token,
                 prefix="!",
@@ -154,7 +123,6 @@ def main():
             print(f"Connected as {self.bot_nick} in {cfg['twitch_channel']}")
             logging.info("IRC ready; requesting channel JOIN")
 
-            # 0) confirm chat join
             async def _ping():
                 try:
                     await self.connected_channels[0].send("i'm alive!")
@@ -163,7 +131,6 @@ def main():
                     logging.error("JOIN failed: %s", e)
             asyncio.create_task(_ping())
 
-            # 1) Helix / IDs (streamer token)
             twitch = await Twitch(CLIENT_ID, CLIENT_SECRET)
             await twitch.set_user_authentication(
                 cfg["streamer_access_token"],
@@ -175,14 +142,10 @@ def main():
                 twitch.get_users(logins=[cfg["twitch_channel"]])
             )).id
 
-            # 2) websocket (created but not started yet)
             self.es = EventSubWebsocket(twitch)
-
-            # 3) START the websocket first
             self.es.start()
             logging.info("EventSub websocket started")
 
-            # 4) register add-ons
             for mod, folder in zip(mods, dirs):
                 if hasattr(mod, "register"):
                     try:
@@ -196,14 +159,10 @@ def main():
                             asyncio.create_task(coro)
                     except Exception as e:
                         logging.error("[%s] start %s", mod.__name__, e)
-
-            # wait for subscriptions/tasks if any
             if self.pending_subs:
                 await asyncio.gather(*self.pending_subs)
             for task in self.pending_tasks:
                 asyncio.create_task(task)
-
-            # 5) resubscribe on reconnect
             async def resub_loop():
                 last = getattr(self.es, "_session_id", None)
                 while True:
@@ -219,8 +178,6 @@ def main():
                                 except Exception as e:
                                     logging.error("[%s] re-reg %s", mod.__name__, e)
             asyncio.create_task(resub_loop())
-
-            # core command
             self.register("lilhelp", self.cmd_help, "List commands")
 
         async def event_message(self, msg):
@@ -242,7 +199,6 @@ def main():
         async def cmd_help(self, msg, _):
             await self.safe_send("Commands: " + ", ".join(sorted(self.cmds)))
 
-    # graceful Ctrl-C --------------------------------------------------------
     bot = LJB()
 
     async def _shutdown():
