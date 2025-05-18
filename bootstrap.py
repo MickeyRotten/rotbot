@@ -2,10 +2,24 @@
 """
 bootstrap.py – single entry-point double-clicked by the streamer.
 • Installs any missing PyPI wheels from core AND all addons.
+• Checks for updates (and applies them if the user accepts).
 • Then jumps into ljb.twitch_bot.main()
 """
 
-import importlib.util, subprocess, sys, json, os, logging, time, asyncio, threading, socketserver, http.server, webbrowser, requests
+import importlib.util
+import subprocess
+import sys
+import json
+import os
+import logging
+import time
+import asyncio
+import threading
+import socketserver
+import http.server
+import webbrowser
+import requests
+import dotenv
 from pathlib import Path
 
 ASCII_ART = r"""
@@ -17,11 +31,19 @@ ASCII_ART = r"""
   \/_____/   \/_/   \/_____/ \/_____/   \/_____/   \/_/   \/_____/   \/_____/   \/_/ /_/ 
                                                                                          
 
-liljuicerbot v0.01 ALPHA
 made by mickeyrotten
-
 """
 print(ASCII_ART)
+
+# Load version number from version.txt
+version_file = Path(__file__).parent / "version.txt"
+if version_file.exists():
+    with open(version_file, "r", encoding="utf-8") as f:
+        VERSION = f.read().strip()
+else:
+    VERSION = "unknown"
+
+print(f"version: {VERSION}")
 
 ROOT       = Path(__file__).parent
 ADDONS_DIR = ROOT / "addons"
@@ -41,7 +63,14 @@ def ensure_pkgs(pkgs):
         sys.exit(1)
 
 # 1) Core hard-coded requirements
-core_reqs = ["twitchio", "twitchAPI", "httpx"]
+core_reqs = [
+    "twitchio",
+    "twitchAPI",
+    "httpx",
+    "requests",     # for update_checker and token validation
+    "zipfile36",    # fallback for zipfile on older Python (optional, but safe)
+    "python-dotenv" # for .env support
+]
 ensure_pkgs(core_reqs)
 
 # 2) Add-on requirements
@@ -60,6 +89,20 @@ if ADDONS_DIR.exists():
 if addon_reqs:
     ensure_pkgs(sorted(set(addon_reqs)))
 
+# 3) Update checker requirements (ensure any missing deps for updater)
+update_reqs = [
+    "requests",  # already listed above, but harmless to repeat
+]
+ensure_pkgs(update_reqs)
+
 # -----------------------------------------------------------------
+# 4) Check for updates before running bot
+try:
+    from update_checker import check_and_perform_update
+    check_and_perform_update(local_version=VERSION)
+except ImportError as e:
+    print("[bootstrap] Warning: update_checker module not found. Skipping update check.")
+
+# 5) Launch the bot
 from ljb.twitch_bot import main
 main()

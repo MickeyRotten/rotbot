@@ -1,12 +1,6 @@
-{
-  "client_id": "rm7pq6zqelnnhotyisfkg39kwxzx2q",
-  "client_secret": "z3hsve174xm3ilqnzse9zj2ywqp25o",
-  
+{ 
   "streamer_access_token": "",
   "streamer_refresh_token": "",
   "twitch_channel": "",
-  
-  "bot_access_token": "s9in5acv49gqztdaqgj4xak21lnu00",
-  "bot_refresh_token": "wtj25oug4vnsoyc6kunzxodf4a37jz5jqywx5rvsc9x58d9wg8",
   "bot_nick": "liljuicerbot"
 }
