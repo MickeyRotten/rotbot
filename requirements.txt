@@ -1,0 +1,5 @@
+twitchio
+twitchAPI
+httpx
+requests
+python-dotenv

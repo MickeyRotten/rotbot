@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 import glob
 
-GITHUB_VERSION_URL = "https://raw.githubusercontent.com/MickeyRotten/rotbot/main/version.txt"
+GITHUB_VERSIONS_URL = "https://raw.githubusercontent.com/MickeyRotten/rotbot/main/versions.json"
 GITHUB_ZIP_URL = "https://github.com/MickeyRotten/rotbot/archive/refs/heads/main.zip"
 
 PRESERVE_FILES = [
@@ -21,25 +21,39 @@ PRESERVE_PATTERNS = [
     "logs/*"
 ]
 
-def check_and_perform_update(local_version: str):
+def check_and_perform_update(core_version: str, addon_versions: dict):
     try:
-        r = requests.get(GITHUB_VERSION_URL)
+        r = requests.get(GITHUB_VERSIONS_URL)
         r.raise_for_status()
-        latest = r.text.strip()
+        remote = r.json()
     except Exception as e:
         print("Error checking for update:", e)
         return
 
-    if latest != local_version:
-        print(f"Update available! Latest: {latest}, You: {local_version}")
-        do_update = input("Download and install update? (Y/N): ").strip().lower()
+    updates = []
+
+    # Core version check
+    remote_core = remote.get("core", None)
+    if remote_core and remote_core != core_version:
+        updates.append(f"core (local: {core_version}, latest: {remote_core})")
+
+    # Addon version checks
+    remote_addons = remote.get("addons", {})
+    for addon_name, local_ver in addon_versions.items():
+        remote_ver = remote_addons.get(addon_name)
+        if remote_ver and remote_ver != local_ver:
+            updates.append(f"{addon_name} (local: {local_ver}, latest: {remote_ver})")
+
+    if updates:
+        print("Updates available for: " + ", ".join(updates))
+        do_update = input("Download and install update for ALL? (Y/N): ").strip().lower()
         if do_update == "y":
             update_rotbot()
             sys.exit(0)
         else:
-            print("Continuing with current version.")
+            print("Continuing with current versions.")
     else:
-        print("You are up to date.")
+        print("All core and addon versions are up to date.")
 
 def update_rotbot():
     print("Downloading and installing latest version...")

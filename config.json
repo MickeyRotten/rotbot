@@ -1,6 +1,6 @@
 {
-  "streamer_access_token": "",
-  "streamer_refresh_token": "",
-  "twitch_channel": "",
+  "streamer_access_token": null,
+  "streamer_refresh_token": null,
+  "twitch_channel": null,
   "bot_nick": "liljuicerbot"
 }
