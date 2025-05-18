@@ -172,3 +172,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+addons/ljb_spotify_request/addon_tokens.json
