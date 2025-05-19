@@ -6,8 +6,6 @@ from spotipy.oauth2 import SpotifyOAuth
 from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionAddEvent
 from dotenv import load_dotenv
 
-load_dotenv()
-
 ASCII_ART = r"""
  _     _  _      ____ _____  ____  _____  _  ____ __  __
 | |__ | || |__  (_ (_`| ()_)/ () \|_   _|| || ===|\ \/ /
@@ -21,6 +19,8 @@ CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REDIRECT_URI  = "http://localhost:8765/"
 SCOPES        = "user-read-playback-state user-modify-playback-state"
 ADDON_NAME    = "ljb_spotify_request"
+ROOT = Path(__file__).resolve().parent.parent  # adjust as needed
+load_dotenv(dotenv_path=ROOT / ".env")
 
 def _cfg(folder): return json.load(open(Path(folder)/"addon_config.json", encoding="utf-8"))
 def _load_banned(folder):
