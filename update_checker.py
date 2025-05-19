@@ -21,6 +21,15 @@ PRESERVE_PATTERNS = [
     "logs/*"
 ]
 
+def version_tuple(v):
+    return tuple(map(int, (v.split("."))))
+def is_remote_newer(local, remote):
+    try:
+        return version_tuple(remote) > version_tuple(local)
+    except Exception:
+        # fallback: any difference triggers update
+        return remote != local
+
 def check_and_perform_update(core_version: str, addon_versions: dict):
     try:
         r = requests.get(GITHUB_VERSIONS_URL)
@@ -34,14 +43,14 @@ def check_and_perform_update(core_version: str, addon_versions: dict):
 
     # Core version check
     remote_core = remote.get("core", None)
-    if remote_core and remote_core != core_version:
+    if remote_core and is_remote_newer(core_version, remote_core):
         updates.append(f"core (local: {core_version}, latest: {remote_core})")
 
     # Addon version checks
     remote_addons = remote.get("addons", {})
     for addon_name, local_ver in addon_versions.items():
         remote_ver = remote_addons.get(addon_name)
-        if remote_ver and remote_ver != local_ver:
+        if remote_ver and is_remote_newer(local_ver, remote_ver):
             updates.append(f"{addon_name} (local: {local_ver}, latest: {remote_ver})")
 
     if updates:

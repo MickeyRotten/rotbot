@@ -6,17 +6,40 @@ import time
 import json
 from pathlib import Path
 
-ASCII_ART = r"""
-█    ▄█ █     ▄▄▄▄▄ ▄   ▄█ ▄█▄    ▄███▄   █▄▄▄▄
-█    ██ █   ▄▀  █    █  ██ █▀ ▀▄  █▀   ▀  █  ▄▀
-█    ██ █       █ █   █ ██ █   ▀  ██▄▄    █▀▀▌ 
-███▄ ▐█ ███▄ ▄ █  █   █ ▐█ █▄  ▄▀ █▄   ▄▀ █  █ 
-    ▀ ▐     ▀ ▀   █▄ ▄█  ▐ ▀███▀  ▀███▀     █  
-                   ▀▀▀                     ▀   
+sys.stdout.reconfigure(encoding='utf-8')
+
+ASCII_ART_ROTSOFT = r"""
+
+
+   ██▀███   ▒█████  ▄▄▄█████▓  ██████  ▒█████    █████▒▄▄▄█████▓
+  ▓██ ▒ ██▒▒██▒  ██▒▓  ██▒ ▓▒▒██    ▒ ▒██▒  ██▒▓██   ▒ ▓  ██▒ ▓▒
+  ▓██ ░▄█ ▒▒██░  ██▒▒ ▓██░ ▒░░ ▓██▄   ▒██░  ██▒▒████ ░ ▒ ▓██░ ▒░
+  ▒██▀▀█▄  ▒██   ██░░ ▓██▓ ░   ▒   ██▒▒██   ██░░▓█▒  ░ ░ ▓██▓ ░ 
+  ░██▓ ▒██▒░ ████▓▒░  ▒██▒ ░ ▒██████▒▒░ ████▓▒░░▒█░      ▒██▒ ░ 
+  ░ ▒▓ ░▒▓░░ ▒░▒░▒░   ▒ ░░   ▒ ▒▓▒ ▒ ░░ ▒░▒░▒░  ▒ ░      ▒ ░░   
+    ░▒ ░ ▒░  ░ ▒ ▒░     ░    ░ ░▒  ░ ░  ░ ▒ ▒░  ░          ░    
+    ░░   ░ ░ ░ ░ ▒    ░      ░  ░  ░  ░ ░ ░ ▒   ░ ░      ░      
+     ░         ░ ░                 ░      ░ ░                                                                               
 """
 
+ASCII_ART_BOT = r"""
+  ▄▄▌  ▪  ▄▄▌   ▐▄▄▄▄• ▄▌▪   ▄▄· ▄▄▄ .▄▄▄  
+  ██•  ██ ██•    ·███▪██▌██ ▐█ ▌▪▀▄.▀·▀▄ █·
+  ██▪  ▐█·██▪  ▪▄ ███▌▐█▌▐█·██ ▄▄▐▀▀▪▄▐▀▀▄ 
+  ▐█▌▐▌▐█▌▐█▌▐▌▐▌▐█▌▐█▄█▌▐█▌▐███▌▐█▄▄▌▐█•█▌
+  .▀▀▀ ▀▀▀.▀▀▀  ▀▀▀• ▀▀▀ ▀▀▀·▀▀▀  ▀▀▀ .▀  ▀         
+"""
+
+def fake_loading_bar(text="loading", total=30, delay=0.04):
+    for i in range(total + 1):
+        percent = int(100 * i / total)
+        bar = "█" * i + '-' * (total - i)
+        print(f"\r{text}: |{bar}| {percent}%", end="", flush=True)
+        time.sleep(delay)
+    print(" Done!\n")
+
 def print_divider():
-    print("\n" + "=" * 60 + "\n")
+    print("\n" + "#" * 73 + "\n")
 
 def ensure_requirements_installed():
     """Install all core requirements from requirements.txt, only if needed."""
@@ -28,10 +51,10 @@ def ensure_requirements_installed():
             pkg_resources.require(packages)
             return
         except (pkg_resources.DistributionNotFound, pkg_resources.VersionConflict):
-            print("[bootstrap] Installing missing core dependencies from requirements.txt...")
+            print("[bootstrap] installing missing core dependencies from requirements.txt...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "-r", "requirements.txt"])
     except ImportError:
-        print("[bootstrap] Installing core dependencies from requirements.txt...")
+        print("[bootstrap] installing core dependencies from requirements.txt...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "-r", "requirements.txt"])
 
 def install_addon_requirements(addons_dir="addons"):
@@ -39,7 +62,7 @@ def install_addon_requirements(addons_dir="addons"):
     try:
         import pkg_resources
     except ImportError:
-        print("[bootstrap] Installing all addon requirements...")
+        print("[bootstrap] installing all addon requirements...")
         for addon in Path(addons_dir).iterdir():
             req = addon / "requirements.txt"
             if req.exists():
@@ -56,9 +79,9 @@ def install_addon_requirements(addons_dir="addons"):
                 packages = [line.strip() for line in reqf if line.strip() and not line.startswith("#")]
             try:
                 pkg_resources.require(packages)
-                print(f"[bootstrap] All requirements satisfied for addon '{addon.name}'.")
+                print(f"[bootstrap] all requirements satisfied for addon '{addon.name}'.")
             except (pkg_resources.DistributionNotFound, pkg_resources.VersionConflict):
-                print(f"[bootstrap] Installing requirements for addon '{addon.name}'...")
+                print(f"[bootstrap] installing requirements for addon '{addon.name}'...")
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "-r", str(req)])
 
 def list_loaded_addons(addons_dir="addons"):
@@ -66,7 +89,7 @@ def list_loaded_addons(addons_dir="addons"):
     addons_path = Path(addons_dir)
     versions = {}
     if not addons_path.exists():
-        print("No addons directory found.")
+        print("no addons directory found.")
         return versions
     loaded = []
     for addon in sorted(addons_path.iterdir()):
@@ -79,9 +102,9 @@ def list_loaded_addons(addons_dir="addons"):
             else:
                 versions[addon.name] = "unknown"
     if loaded:
-        print("Loaded addons: " + ", ".join(f"{n} (v{versions[n]})" for n in loaded))
+        print("loaded addons: " + ", ".join(f"{n} (v{versions[n]})" for n in loaded))
     else:
-        print("No addons found.")
+        print("no addons found.")
     return versions
 
 def read_core_version():
@@ -93,14 +116,15 @@ def read_core_version():
 def main_menu():
     while True:
         print_divider()
-        print("Welcome to LilJuicerBot!")
-        print("Select an option:")
-        print("  1) Launch bot")
-        print("  2) Configure bot")
-        print("  3) Manage addons")
-        print("  4) Reset all user tokens")
-        print("  5) Exit")
-        choice = input("\nEnter your choice: ").strip()
+        print(ASCII_ART_BOT)
+        print("select an option:")
+        print("")
+        print("  1) launch bot")
+        print("  2) configure bot")
+        print("  3) manage addons")
+        print("  4) reset all user tokens")
+        print("  5) exit")
+        choice = input("\nenter your choice: ").strip()
         if choice == "1":
             launch_bot()
         elif choice == "2":
@@ -110,29 +134,29 @@ def main_menu():
         elif choice == "4":
             reset_user_tokens()
         elif choice == "5":
-            print("Goodbye! Thanks for using LilJuicerBot.")
+            print("bye! thanks for using lilrotbot.")
             time.sleep(1)
             break
         else:
-            print("Invalid choice. Please select a number from the menu.")
+            print("invalid choice. please select a number from the menu.")
 
 def launch_bot():
     print_divider()
-    print("Launching LilJuicerBot. The bot console will now run below.\n")
+    print("launching lilrotbot. the bot console will now run below.\n")
     time.sleep(0.7)
     from ljb.twitch_bot import main
     main()  # Hands over control to the bot
 
 def configure_bot():
     print_divider()
-    print("Configuration is not yet implemented.")
-    print("For now, edit 'config.json' or '.env' directly.")
+    print("configuration is not yet implemented.")
+    print("for now, edit 'config.json' or '.env' directly.")
     time.sleep(1.5)
 
 def manage_addons():
     print_divider()
-    print("Addon management is not yet implemented.")
-    print("Addons can be managed by placing/removing folders in the 'addons/' directory.")
+    print("addon management is not yet implemented.")
+    print("addons can be managed by placing/removing folders in the 'addons/' directory.")
     time.sleep(1.5)
     
 def reset_user_tokens():
@@ -160,7 +184,7 @@ def reset_user_tokens():
             cfg[k] = v
         with config_path.open("w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2)
-        print("[reset] Core config.json tokens reset.")
+        print("[reset] core config.json tokens reset.")
     else:
         print("[reset] config.json not found.")
 
@@ -177,29 +201,32 @@ def reset_user_tokens():
     print(f"[reset] {n} addon token file(s) removed.")
 
     print_divider()
-    print("All user tokens and OAuth credentials have been reset.")
-    print("You will need to re-authorize on next launch.")
-    input("Press Enter to return to the menu...")
+    print("all user tokens and OAuth credentials have been reset.")
+    print("you will need to re-authorize on next launch.")
+    input("press enter to return to the menu...")
 
 def check_for_updates_auto(core_version, addon_versions):
     try:
         from update_checker import check_and_perform_update
         check_and_perform_update(core_version=core_version, addon_versions=addon_versions)
     except ImportError:
-        print("[bootstrap] Warning: update_checker module not found. Skipping update check.")
+        print("[bootstrap] warning: update_checker module not found. skipping update check.")
     time.sleep(0.2)
 
 if __name__ == "__main__":
     os.system('cls' if os.name == 'nt' else 'clear')
-    print(ASCII_ART)
+    print(ASCII_ART_ROTSOFT)
 
-    # Show versions
+    # Show fake loading bar and versions
+    print_divider()
+    fake_loading_bar("loading core", total=40, delay=0.04)
     CORE_VERSION = read_core_version()
-    print(f"core version: {CORE_VERSION}")
-
-    # Show loaded addons and versions
+    print(f"loaded core version: {CORE_VERSION}")
+    print_divider()
+    fake_loading_bar("loading addons", total=38, delay=0.03)
     addon_versions = list_loaded_addons()
-
+    print_divider()
+    
     # Install requirements from requirements.txt
     ensure_requirements_installed()
 
