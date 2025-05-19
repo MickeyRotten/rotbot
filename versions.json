@@ -1,6 +1,6 @@
 {
   "core": "0.1.5",
   "addons": {
-    "ljb_spotify_request": "0.1.1"
+    "ljb_spotify_request": "0.1.2"
   }
 }
