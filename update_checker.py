@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 import glob
 
-GITHUB_VERSIONS_URL = "https://raw.githubusercontent.com/MickeyRotten/rotbot/main/versions.json"
+GITHUB_VERSIONS_URL = "https://raw.githubusercontent.com/MickeyRotten/rotbot/refs/heads/main/versions.json"
 GITHUB_ZIP_URL = "https://github.com/MickeyRotten/rotbot/archive/refs/heads/main.zip"
 
 PRESERVE_FILES = [
