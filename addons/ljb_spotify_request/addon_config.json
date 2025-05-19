@@ -1,8 +1,8 @@
 {
   "requirements": ["yt_dlp","re"],
   "redeem_name": "song request",
-  "msg_success": "NemuJam i queued {title} by {artist}",
-  "msg_fail":    "notCinema i failed to queue {title} by {artist}: {error}",
-  "msg_banned":  "FERAL i skipped a banned song: {title} by {artist}",
-  "msg_online":  "add-on loaded! NemuJam ready to queue those song requests!"
+  "msg_success": "NemuJam i queued {title} by {artist} for {user}",
+  "msg_fail":    "notCinema i couldn't queue {title} by {artist} for {user}: {error}",
+  "msg_banned":  "FERAL i skipped a banned song {title} by {artist} requested by {user}",
+  "msg_online":  "NemuJam @NEMURIIIIN i'm ready to queue those song requests!"
 }

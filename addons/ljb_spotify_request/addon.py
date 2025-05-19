@@ -12,6 +12,13 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs, quote_plus
 from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionAddEvent
 
+# Load CLIENT_ID and CLIENT_SECRET from .env
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # Will fail gracefully if dotenv not installed
+
 ASCII_ART = r"""
 ADDON LOADED: spotify_song_request
 MADE BY: mickeyrotten
@@ -19,8 +26,8 @@ MADE BY: mickeyrotten
 print(ASCII_ART)
 
 # ── constants ───────────────────────────────────────────────────
-CLIENT_ID     = "6c43d2b3ccf544d1b69fa66066ea1b3b"
-CLIENT_SECRET = "a53c3033b9084bad974e3090308f5c37"
+CLIENT_ID     = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REDIRECT_URI  = "http://localhost:8765/"
 SCOPES        = "user-read-playback-state user-modify-playback-state"
 ADDON_NAME    = "ljb_spotify_request"
@@ -115,67 +122,68 @@ def register(bot, folder=os.path.dirname(__file__)):
     banned= _load_banned(folder)
     _initial_oauth(folder)
 
-    async def process_query(query:str):
-        # YouTube link → title
-        if YTLINK.search(query):
-            url=query.split()[0]
-            try:
-                info=await asyncio.to_thread(
-                    yt_dlp.YoutubeDL({"quiet":True}).extract_info,
-                    url, download=False)
-                title=re.sub(r"\(.*?official.*?\)", "", info["title"], flags=re.I)
-                query=re.sub(r"\[.*?]", "", title).strip()
-            except Exception as e:
-                await bot.safe_send(cfg["msg_fail"].format(
-                    bot_nick=bot.bot_nick,title="YouTube link",artist="",error=str(e)))
-                return
-
-        # Reject album / playlist / artist links
-        if any(p in query for p in ("open.spotify.com/album/",
-                                    "open.spotify.com/playlist/",
-                                    "open.spotify.com/artist/",
-                                    "spotify:album:", "spotify:playlist:", "spotify:artist:")):
+async def process_query(query: str, user: str):
+    # YouTube link → title
+    if YTLINK.search(query):
+        url = query.split()[0]
+        try:
+            info = await asyncio.to_thread(
+                yt_dlp.YoutubeDL({"quiet": True}).extract_info,
+                url, download=False)
+            title = re.sub(r"\(.*?official.*?\)", "", info["title"], flags=re.I)
+            query = re.sub(r"\[.*?]", "", title).strip()
+        except Exception as e:
             await bot.safe_send(cfg["msg_fail"].format(
-                bot_nick=bot.bot_nick, title="album / playlist",
-                artist="", error="only individual tracks can be queued"))
+                bot_nick=bot.bot_nick, title="YouTube link", artist="", error=str(e), user=user))
             return
 
-        tok   = await _refresh(folder)
-        hdr   = {"Authorization":f"Bearer {tok['access_token']}"}
+    # Reject album / playlist / artist links
+    if any(p in query for p in ("open.spotify.com/album/",
+                                "open.spotify.com/playlist/",
+                                "open.spotify.com/artist/",
+                                "spotify:album:", "spotify:playlist:", "spotify:artist:")):
+        await bot.safe_send(cfg["msg_fail"].format(
+            bot_nick=bot.bot_nick, title="album / playlist",
+            artist="", error="only individual tracks can be queued", user=user))
+        return
 
-        async with httpx.AsyncClient() as cli:
-            if "open.spotify.com/track/" in query or query.startswith("spotify:track:"):
-                r=await cli.get(f"https://api.spotify.com/v1/tracks/{_track_id(query)}",
-                                headers=hdr)
-                if r.status_code!=200:
-                    await bot.safe_send(cfg["msg_fail"].format(
-                        bot_nick=bot.bot_nick,title=query,artist="",error=r.text))
-                    return
-                tr=r.json()
-            else:
-                sr=await cli.get("https://api.spotify.com/v1/search",
-                                 headers=hdr, params={"q":query,"type":"track","limit":1})
-                items=sr.json()['tracks']['items']
-                if not items:
-                    await bot.safe_send(cfg["msg_fail"].format(
-                        bot_nick=bot.bot_nick,title=query,artist="",error="no match"))
-                    return
-                tr=items[0]
+    tok = await _refresh(folder)
+    hdr = {"Authorization": f"Bearer {tok['access_token']}"}
 
-            tid=tr["id"].lower()
-            if tid in banned:
-                await bot.safe_send(cfg["msg_banned"].format(
-                    bot_nick=bot.bot_nick,title=tr["name"],artist=tr["artists"][0]["name"]))
+    async with httpx.AsyncClient() as cli:
+        if "open.spotify.com/track/" in query or query.startswith("spotify:track:"):
+            r = await cli.get(f"https://api.spotify.com/v1/tracks/{_track_id(query)}",
+                              headers=hdr)
+            if r.status_code != 200:
+                await bot.safe_send(cfg["msg_fail"].format(
+                    bot_nick=bot.bot_nick, title=query, artist="", error=r.text, user=user))
                 return
+            tr = r.json()
+        else:
+            sr = await cli.get("https://api.spotify.com/v1/search",
+                               headers=hdr, params={"q": query, "type": "track", "limit": 1})
+            items = sr.json()['tracks']['items']
+            if not items:
+                await bot.safe_send(cfg["msg_fail"].format(
+                    bot_nick=bot.bot_nick, title=query, artist="", error="no match", user=user))
+                return
+            tr = items[0]
 
-            q=await cli.post("https://api.spotify.com/v1/me/player/queue",
-                             headers=hdr, params={"uri":tr["uri"]})
-            data = {"bot_nick":bot.bot_nick,
-                    "title":tr["name"],
-                    "artist":tr["artists"][0]["name"],
-                    "error":q.text}
-            msg = "msg_success" if 200<=q.status_code<300 else "msg_fail"
-            await bot.safe_send(cfg[msg].format(**data))
+        tid = tr["id"].lower()
+        if tid in banned:
+            await bot.safe_send(cfg["msg_banned"].format(
+                bot_nick=bot.bot_nick, title=tr["name"], artist=tr["artists"][0]["name"], user=user))
+            return
+
+        q = await cli.post("https://api.spotify.com/v1/me/player/queue",
+                           headers=hdr, params={"uri": tr["uri"]})
+        data = {"bot_nick": bot.bot_nick,
+                "title": tr["name"],
+                "artist": tr["artists"][0]["name"],
+                "error": q.text,
+                "user": user}
+        msg = "msg_success" if 200 <= q.status_code < 300 else "msg_fail"
+        await bot.safe_send(cfg[msg].format(**data))
 
     # channel-point redeem
     async def on_redeem(evt: ChannelPointsCustomRewardRedemptionAddEvent):
@@ -189,8 +197,9 @@ def register(bot, folder=os.path.dirname(__file__)):
 
         if reward_title and reward_title.lower() == cfg["redeem_name"].lower():
             user_input = getattr(evt.event, "user_input", "").strip()
+            user_name = getattr(evt.event, "user_name", None) or getattr(evt.event, "user_login", "someone")
             if user_input:
-                await process_query(user_input)
+                await process_query(user_input, user_name)
             else:
                 print("[WARN] No user_input found for this redemption.")
 
@@ -206,7 +215,7 @@ def register(bot, folder=os.path.dirname(__file__)):
             await bot.safe_send("Usage: !sr <song or Spotify/YouTube link>")
             return
 
-        await process_query(" ".join(args))
+        await process_query(" ".join(args), msg.author.display_name)
 
     bot.register("sr", cmd_sr, "queue a song (mods/streamer)")
 
@@ -226,4 +235,3 @@ def register(bot, folder=os.path.dirname(__file__)):
         await asyncio.sleep(1)         # give WS a moment
         await bot.safe_send(cfg["msg_online"].format(bot_nick=bot.bot_nick))
     bot.pending_tasks.append(announce())
-
