@@ -1,3 +1,5 @@
+spotipy
 yt-dlp
 httpx
+python-dotenv
 twitchAPI
