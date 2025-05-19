@@ -9,8 +9,6 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding='utf-8')
 
 ASCII_ART_ROTSOFT = r"""
-
-
    ██▀███   ▒█████  ▄▄▄█████▓  ██████  ▒█████    █████▒▄▄▄█████▓
   ▓██ ▒ ██▒▒██▒  ██▒▓  ██▒ ▓▒▒██    ▒ ▒██▒  ██▒▓██   ▒ ▓  ██▒ ▓▒
   ▓██ ░▄█ ▒▒██░  ██▒▒ ▓██░ ▒░░ ▓██▄   ▒██░  ██▒▒████ ░ ▒ ▓██░ ▒░
@@ -113,7 +111,16 @@ def read_core_version():
         return version_file.read_text().strip()
     return "unknown"
 
-def main_menu():
+def check_for_updates_menu(core_version, addon_versions):
+    print_divider()
+    try:
+        from update_checker import check_and_perform_update
+        check_and_perform_update(core_version=core_version, addon_versions=addon_versions)
+    except ImportError:
+        print("[bootstrap] warning: update_checker module not found. skipping update check.")
+    input("\nPress enter to return to the menu...")
+
+def main_menu(core_version, addon_versions):
     while True:
         print_divider()
         print(ASCII_ART_BOT)
@@ -123,7 +130,8 @@ def main_menu():
         print("  2) configure bot")
         print("  3) manage addons")
         print("  4) reset all user tokens")
-        print("  5) exit")
+        print("  5) check for updates")
+        print("  6) exit")
         choice = input("\nenter your choice: ").strip()
         if choice == "1":
             launch_bot()
@@ -134,6 +142,8 @@ def main_menu():
         elif choice == "4":
             reset_user_tokens()
         elif choice == "5":
+            check_for_updates_menu(core_version, addon_versions)
+        elif choice == "6":
             print("bye! thanks for using lilrotbot.")
             time.sleep(1)
             break
@@ -205,14 +215,6 @@ def reset_user_tokens():
     print("you will need to re-authorize on next launch.")
     input("press enter to return to the menu...")
 
-def check_for_updates_auto(core_version, addon_versions):
-    try:
-        from update_checker import check_and_perform_update
-        check_and_perform_update(core_version=core_version, addon_versions=addon_versions)
-    except ImportError:
-        print("[bootstrap] warning: update_checker module not found. skipping update check.")
-    time.sleep(0.2)
-
 if __name__ == "__main__":
     os.system('cls' if os.name == 'nt' else 'clear')
     print(ASCII_ART_ROTSOFT)
@@ -233,7 +235,6 @@ if __name__ == "__main__":
     # Install requirements for all addons (if any)
     install_addon_requirements()
 
-    # Automatic update check before menu
-    check_for_updates_auto(CORE_VERSION, addon_versions)
+    # NO more auto-update check!
 
-    main_menu()
+    main_menu(CORE_VERSION, addon_versions)
