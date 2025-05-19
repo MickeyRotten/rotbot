@@ -5,6 +5,7 @@ on:
     paths:
       - 'version.txt'
       - 'addons/**/version.txt'
+      # Do not include 'versions.json'!
 
 jobs:
   update-versions:
@@ -28,5 +29,6 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Auto-update versions.json"
+            git pull --rebase origin ${{ github.ref_name }}
             git push
           fi
