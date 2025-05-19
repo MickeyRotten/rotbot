@@ -3,6 +3,6 @@
   "redeem_name": "song request",
   "msg_success": "NemuJam i queued {title} by {artist} for {user}",
   "msg_fail":    "notCinema i couldn't queue {title} by {artist} for {user}: {error}",
-  "msg_banned":  "FERAL i skipped a banned song {title} by {artist} requested by {user}",
-  "msg_online":  "NemuJam @NEMURIIIIN i'm ready to queue those song requests!"
+  "msg_banned":  "FERAL i couldn't queue {title} by {artist} for {user}: BANNED SONG!",
+  "msg_online":  "NemuJam i'm ready to queue those song requests!"
 }
